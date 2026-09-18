@@ -1,20 +1,128 @@
 <!DOCTYPE html>
-<html>
+<html lang="es">
 <head>
+    <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <link href="https://vjs.zencdn.net/7.20.3/video-js.css" rel="stylesheet" />
-    <script src="https://vjs.zencdn.net/7.20.3/video.min.js"></script>
+    <title>Sasha TV</title>
+    <script src="https://cdn.jsdelivr.net/npm/hls.js@latest"></script>
     <style>
-        body { margin: 0; background-color: #000; color: #fff; font-family: sans-serif; }
-        video { width: 100vw; height: 60vh; }
+        * {
+            box-sizing: border-box;
+            margin: 0;
+            padding: 0;
+        }
+        body, html {
+            width: 100%;
+            height: 100%;
+            background-color: #000;
+            font-family: Arial, sans-serif;
+            overflow: hidden;
+            color: #fff;
+        }
+        #container {
+            display: flex;
+            width: 100vw;
+            height: 100vh;
+        }
+        #playlist {
+            width: 300px;
+            height: 100%;
+            background: #111;
+            overflow-y: auto;
+            border-right: 1px solid #333;
+        }
+        .channel-item {
+            padding: 12px 16px;
+            border-bottom: 1px solid #222;
+            cursor: pointer;
+            font-size: 14px;
+        }
+        .channel-item:hover, .channel-item:focus {
+            background-color: #2b2b2b;
+            color: #00d4ff;
+            outline: none;
+        }
+        #player-wrapper {
+            flex: 1;
+            height: 100%;
+            background: #000;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+        }
+        video {
+            width: 100%;
+            height: 100%;
+            object-fit: contain;
+        }
     </style>
 </head>
 <body>
-    <video id="player" class="video-js vjs-default-skin" controls autoplay preload="auto"></video>
-    <script>
-        var player = videojs('player');
-        // Tu URL corta de M3U4U
-        player.src({ src: 'http://m3u4u.com/m3u/xe47yz98gzhzxgvgn9vq', type: 'application/x-mpegURL' });
-    </script>
+
+<div id="container">
+    <div id="playlist">
+        <div style="padding: 15px; font-weight: bold; background: #222;">SASHA TV</div>
+        <div id="channels">Cargando canales...</div>
+    </div>
+    <div id="player-wrapper">
+        <video id="video" controls autoplay></video>
+    </div>
+</div>
+
+<script>
+    const m3uUrl = 'https://m3u4u.com/m3u/799g21y2zksw8396nkz8'; // Tu enlace de m3u4u
+    const video = document.getElementById('video');
+    const channelsContainer = document.getElementById('channels');
+
+    let hls = new Hls();
+
+    function playStream(url) {
+        if (Hls.isSupported()) {
+            hls.destroy();
+            hls = new Hls();
+            hls.loadSource(url);
+            hls.attachMedia(video);
+            hls.on(Hls.Events.MANIFEST_PARSED, function () {
+                video.play();
+            });
+        } else if (video.canPlayType('application/vnd.apple.mpegurl')) {
+            video.src = url;
+            video.addEventListener('loadedmetadata', function () {
+                video.play();
+            });
+        }
+    }
+
+    fetch(m3uUrl)
+        .then(response => response.text())
+        .then(data => {
+            const lines = data.split('\n');
+            channelsContainer.innerHTML = '';
+            let currentName = '';
+
+            lines.forEach(line => {
+                line = line.trim();
+                if (line.startsWith('#EXTINF:')) {
+                    const parts = line.split(',');
+                    currentName = parts[parts.length - 1];
+                } else if (line.startsWith('http')) {
+                    if (currentName) {
+                        const item = document.createElement('div');
+                        item.className = 'channel-item';
+                        item.tabIndex = 0; // Permite navegación por control remoto
+                        item.innerText = currentName;
+                        const streamUrl = line;
+                        item.onclick = () => playStream(streamUrl);
+                        channelsContainer.appendChild(item);
+                        currentName = '';
+                    }
+                }
+            });
+        })
+        .catch(err => {
+            channelsContainer.innerHTML = '<div style="padding: 15px;">Error al cargar lista.</div>';
+        });
+</script>
+
 </body>
 </html>
