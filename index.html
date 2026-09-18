@@ -122,29 +122,47 @@
     let hls = null;
     let allChannels = [];
 
-    function playStream(url) {
+    function playStream(rawUrl) {
         if (hls) {
             hls.destroy();
             hls = null;
         }
 
+        // Pasar por proxy para bypass de bloqueos CORS y HTTP/HTTPS
+        const proxiedUrl = 'https://corsproxy.io/?' + encodeURIComponent(rawUrl);
+
         if (Hls.isSupported()) {
-            hls = new Hls({ enableWorker: true, lowLatencyMode: true });
-            hls.loadSource(url);
-            hls.attachMedia(video);
-            hls.on(Hls.Events.MANIFEST_PARSED, () => {
-                video.play().catch(e => console.log(e));
+            hls = new Hls({
+                enableWorker: true,
+                lowLatencyMode: true
             });
+
+            // Intenta reproducir con el proxy
+            hls.loadSource(proxiedUrl);
+            hls.attachMedia(video);
+
+            hls.on(Hls.Events.MANIFEST_PARSED, () => {
+                video.play().catch(() => {
+                    video.muted = true;
+                    video.play();
+                });
+            });
+
             hls.on(Hls.Events.ERROR, (event, data) => {
                 if (data.fatal) {
-                    if (data.type === Hls.ErrorTypes.NETWORK_ERROR) hls.startLoad();
-                    else if (data.type === Hls.ErrorTypes.MEDIA_ERROR) hls.recoverMediaError();
-                    else hls.destroy();
+                    // Si falla el proxy, intenta directo como respaldo
+                    hls.destroy();
+                    hls = new Hls();
+                    hls.loadSource(rawUrl);
+                    hls.attachMedia(video);
+                    hls.on(Hls.Events.MANIFEST_PARSED, () => {
+                        video.play().catch(() => {});
+                    });
                 }
             });
         } else if (video.canPlayType('application/vnd.apple.mpegurl')) {
-            video.src = url;
-            video.play().catch(e => console.log(e));
+            video.src = rawUrl;
+            video.play().catch(() => {});
         }
     }
 
@@ -159,7 +177,7 @@
         });
 
         const firstBtn = listContainer.querySelector('.channel-btn');
-            if (firstBtn) firstBtn.focus();
+        if (firstBtn) firstBtn.focus();
     }
 
     function filterChannels() {
@@ -186,11 +204,9 @@
             lines.forEach(line => {
                 line = line.trim();
                 if (line.startsWith('#EXTINF:')) {
-                    // Extraer nombre del canal
                     const parts = line.split(',');
                     currentName = parts[parts.length - 1];
 
-                    // Extraer categoría (group-title)
                     const groupMatch = line.match(/group-title="([^"]+)"/i);
                     if (groupMatch && groupMatch[1]) {
                         currentGroup = groupMatch[1];
@@ -210,7 +226,6 @@
                 }
             });
 
-            // Llenar el desplegable de categorías
             Array.from(categoriesSet).sort().forEach(cat => {
                 const opt = document.createElement('option');
                 opt.value = cat;
@@ -218,7 +233,6 @@
                 categorySelect.appendChild(opt);
             });
 
-            // Mostrar todos inicialmente
             renderChannels(allChannels);
         })
         .catch(err => {
