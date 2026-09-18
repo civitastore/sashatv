@@ -70,6 +70,9 @@
             height: 100%;
             background: #000;
             position: relative;
+            display: flex;
+            align-items: center;
+            justify-content: center;
         }
         video {
             width: 100%;
@@ -92,26 +95,47 @@
 </div>
 
 <script>
-    // Enlace exacto con corsproxy para bypass de CORS
     const m3uUrl = './lista.m3u.m3u';
     const video = document.getElementById('video');
     const listContainer = document.getElementById('channel-list');
-    let hls = new Hls();
+    let hls = null;
 
     function playStream(url) {
-        if (Hls.isSupported()) {
+        // Limpia instancia anterior
+        if (hls) {
             hls.destroy();
-            hls = new Hls();
+            hls = null;
+        }
+
+        if (Hls.isSupported()) {
+            hls = new Hls({
+                enableWorker: true,
+                lowLatencyMode: true,
+                backBufferLength: 90
+            });
             hls.loadSource(url);
             hls.attachMedia(video);
             hls.on(Hls.Events.MANIFEST_PARSED, () => {
-                video.play().catch(() => {});
+                video.play().catch(e => console.log("Autoplay error:", e));
+            });
+            hls.on(Hls.Events.ERROR, (event, data) => {
+                if (data.fatal) {
+                    switch (data.type) {
+                        case Hls.ErrorTypes.NETWORK_ERROR:
+                            hls.startLoad();
+                            break;
+                        case Hls.ErrorTypes.MEDIA_ERROR:
+                            hls.recoverMediaError();
+                            break;
+                        default:
+                            hls.destroy();
+                            break;
+                    }
+                }
             });
         } else if (video.canPlayType('application/vnd.apple.mpegurl')) {
             video.src = url;
-            video.addEventListener('loadedmetadata', () => {
-                video.play().catch(() => {});
-            });
+            video.play().catch(e => console.log("Autoplay error:", e));
         }
     }
 
@@ -143,7 +167,7 @@
                 }
             });
 
-            // Dar foco al primer canal para control remoto
+            // Enfocar el primer canal para el control remoto
             const firstBtn = listContainer.querySelector('.channel-btn');
             if (firstBtn) firstBtn.focus();
         })
