@@ -1,0 +1,20 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <link href="https://vjs.zencdn.net/7.20.3/video-js.css" rel="stylesheet" />
+    <script src="https://vjs.zencdn.net/7.20.3/video.min.js"></script>
+    <style>
+        body { margin: 0; background-color: #000; color: #fff; font-family: sans-serif; }
+        video { width: 100vw; height: 60vh; }
+    </style>
+</head>
+<body>
+    <video id="player" class="video-js vjs-default-skin" controls autoplay preload="auto"></video>
+    <script>
+        var player = videojs('player');
+        // Tu URL corta de M3U4U
+        player.src({ src: 'http://m3u4u.com/m3u/xe47yz98gzhzxgvgn9vq', type: 'application/x-mpegURL' });
+    </script>
+</body>
+</html>
