@@ -33,13 +33,30 @@
             flex-direction: column;
         }
         #title {
-            padding: 20px;
+            padding: 15px;
             font-weight: bold;
             font-size: 20px;
             background: #1e1e1e;
             text-align: center;
             color: #00d4ff;
             letter-spacing: 1px;
+        }
+        #category-select {
+            width: 90%;
+            margin: 10px auto;
+            padding: 10px;
+            background: #222;
+            color: #00d4ff;
+            border: 1px solid #333;
+            border-radius: 5px;
+            font-size: 15px;
+            font-weight: bold;
+            outline: none;
+            cursor: pointer;
+        }
+        #category-select:focus {
+            border-color: #00d4ff;
+            background: #333;
         }
         #channel-list {
             flex: 1;
@@ -50,7 +67,7 @@
             border: none;
             border-bottom: 1px solid #222;
             cursor: pointer;
-            font-size: 16px;
+            font-size: 15px;
             display: block;
             width: 100%;
             text-align: left;
@@ -87,6 +104,9 @@
 <div id="app">
     <div id="sidebar">
         <div id="title">SASHA TV</div>
+        <select id="category-select" onchange="filterChannels()">
+            <option value="ALL">Todas las categorías</option>
+        </select>
         <div id="channel-list">Cargando canales...</div>
     </div>
     <div id="player-wrapper">
@@ -98,44 +118,57 @@
     const m3uUrl = './lista.m3u.m3u';
     const video = document.getElementById('video');
     const listContainer = document.getElementById('channel-list');
+    const categorySelect = document.getElementById('category-select');
     let hls = null;
+    let allChannels = [];
 
     function playStream(url) {
-        // Limpia instancia anterior
         if (hls) {
             hls.destroy();
             hls = null;
         }
 
         if (Hls.isSupported()) {
-            hls = new Hls({
-                enableWorker: true,
-                lowLatencyMode: true,
-                backBufferLength: 90
-            });
+            hls = new Hls({ enableWorker: true, lowLatencyMode: true });
             hls.loadSource(url);
             hls.attachMedia(video);
             hls.on(Hls.Events.MANIFEST_PARSED, () => {
-                video.play().catch(e => console.log("Autoplay error:", e));
+                video.play().catch(e => console.log(e));
             });
             hls.on(Hls.Events.ERROR, (event, data) => {
                 if (data.fatal) {
-                    switch (data.type) {
-                        case Hls.ErrorTypes.NETWORK_ERROR:
-                            hls.startLoad();
-                            break;
-                        case Hls.ErrorTypes.MEDIA_ERROR:
-                            hls.recoverMediaError();
-                            break;
-                        default:
-                            hls.destroy();
-                            break;
-                    }
+                    if (data.type === Hls.ErrorTypes.NETWORK_ERROR) hls.startLoad();
+                    else if (data.type === Hls.ErrorTypes.MEDIA_ERROR) hls.recoverMediaError();
+                    else hls.destroy();
                 }
             });
         } else if (video.canPlayType('application/vnd.apple.mpegurl')) {
             video.src = url;
-            video.play().catch(e => console.log("Autoplay error:", e));
+            video.play().catch(e => console.log(e));
+        }
+    }
+
+    function renderChannels(channels) {
+        listContainer.innerHTML = '';
+        channels.forEach(ch => {
+            const btn = document.createElement('button');
+            btn.className = 'channel-btn';
+            btn.innerText = ch.name;
+            btn.onclick = () => playStream(ch.url);
+            listContainer.appendChild(btn);
+        });
+
+        const firstBtn = listContainer.querySelector('.channel-btn');
+            if (firstBtn) firstBtn.focus();
+    }
+
+    function filterChannels() {
+        const selectedGroup = categorySelect.value;
+        if (selectedGroup === 'ALL') {
+            renderChannels(allChannels);
+        } else {
+            const filtered = allChannels.filter(ch => ch.group === selectedGroup);
+            renderChannels(filtered);
         }
     }
 
@@ -145,31 +178,48 @@
             return res.text();
         })
         .then(data => {
-            listContainer.innerHTML = '';
             const lines = data.split('\n');
             let currentName = '';
+            let currentGroup = 'General';
+            const categoriesSet = new Set();
 
             lines.forEach(line => {
                 line = line.trim();
                 if (line.startsWith('#EXTINF:')) {
+                    // Extraer nombre del canal
                     const parts = line.split(',');
                     currentName = parts[parts.length - 1];
+
+                    // Extraer categoría (group-title)
+                    const groupMatch = line.match(/group-title="([^"]+)"/i);
+                    if (groupMatch && groupMatch[1]) {
+                        currentGroup = groupMatch[1];
+                    } else {
+                        currentGroup = 'Otros';
+                    }
+                    categoriesSet.add(currentGroup);
                 } else if (line.startsWith('http')) {
                     if (currentName) {
-                        const btn = document.createElement('button');
-                        btn.className = 'channel-btn';
-                        btn.innerText = currentName;
-                        const stream = line;
-                        btn.onclick = () => playStream(stream);
-                        listContainer.appendChild(btn);
+                        allChannels.push({
+                            name: currentName,
+                            group: currentGroup,
+                            url: line
+                        });
                         currentName = '';
                     }
                 }
             });
 
-            // Enfocar el primer canal para el control remoto
-            const firstBtn = listContainer.querySelector('.channel-btn');
-            if (firstBtn) firstBtn.focus();
+            // Llenar el desplegable de categorías
+            Array.from(categoriesSet).sort().forEach(cat => {
+                const opt = document.createElement('option');
+                opt.value = cat;
+                opt.innerText = cat;
+                categorySelect.appendChild(opt);
+            });
+
+            // Mostrar todos inicialmente
+            renderChannels(allChannels);
         })
         .catch(err => {
             listContainer.innerText = 'Error al cargar lista de canales.';
