@@ -4,17 +4,79 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Sasha TV</title>
-    <script src="https://cdn.jsdelivr.net/npm/clappr@latest/dist/clappr.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/hls.js@latest"></script>
     <style>
-        * { box-sizing: border-box; margin: 0; padding: 0; }
-        body, html { width: 100vw; height: 100vh; background: #000; overflow: hidden; font-family: sans-serif; color: #fff; }
-        #app { display: flex; width: 100%; height: 100%; }
-        #sidebar { width: 320px; height: 100%; background: #141414; border-right: 1px solid #222; overflow-y: auto; }
-        #title { padding: 20px; font-weight: bold; font-size: 18px; background: #202020; text-align: center; color: #00d4ff; }
-        #channel-list { list-style: none; }
-        .channel-btn { padding: 15px 20px; border-bottom: 1px solid #222; cursor: pointer; font-size: 15px; display: block; width: 100%; text-align: left; background: none; color: #fff; border: none; }
-        .channel-btn:focus, .channel-btn:hover { background: #00d4ff; color: #000; outline: none; font-weight: bold; }
-        #player-container { flex: 1; height: 100%; background: #000; }
+        * {
+            box-sizing: border-box;
+            margin: 0;
+            padding: 0;
+        }
+        body, html {
+            width: 100vw;
+            height: 100vh;
+            background-color: #000;
+            font-family: Arial, sans-serif;
+            overflow: hidden;
+            color: #fff;
+        }
+        #app {
+            display: flex;
+            width: 100vw;
+            height: 100vh;
+        }
+        #sidebar {
+            width: 320px;
+            height: 100%;
+            background: #121212;
+            border-right: 2px solid #222;
+            display: flex;
+            flex-direction: column;
+        }
+        #title {
+            padding: 20px;
+            font-weight: bold;
+            font-size: 20px;
+            background: #1e1e1e;
+            text-align: center;
+            color: #00d4ff;
+            letter-spacing: 1px;
+        }
+        #channel-list {
+            flex: 1;
+            overflow-y: auto;
+        }
+        .channel-btn {
+            padding: 16px 20px;
+            border: none;
+            border-bottom: 1px solid #222;
+            cursor: pointer;
+            font-size: 16px;
+            display: block;
+            width: 100%;
+            text-align: left;
+            background: transparent;
+            color: #eee;
+            transition: all 0.2s;
+        }
+        .channel-btn:focus, .channel-btn:hover {
+            background: #00d4ff;
+            color: #000;
+            outline: none;
+            font-weight: bold;
+            padding-left: 28px;
+        }
+        #player-wrapper {
+            flex: 1;
+            height: 100%;
+            background: #000;
+            position: relative;
+        }
+        video {
+            width: 100%;
+            height: 100%;
+            object-fit: contain;
+            background: #000;
+        }
     </style>
 </head>
 <body>
@@ -22,28 +84,44 @@
 <div id="app">
     <div id="sidebar">
         <div id="title">SASHA TV</div>
-        <div id="channel-list">Cargando lista...</div>
+        <div id="channel-list">Cargando canales...</div>
     </div>
-    <div id="player-container"></div>
+    <div id="player-wrapper">
+        <video id="video" controls autoplay playsinline></video>
+    </div>
 </div>
 
 <script>
-    const m3uUrl = 'https://m3u4u.com/m3u/799g21y2zksw8396nkz8';
-    
-    let player = new Clappr.Player({
-        parentId: "#player-container",
-        width: '100%',
-        height: '100%',
-        autoPlay: true
-    });
+    // Enlace exacto con corsproxy para bypass de CORS
+    const m3uUrl = 'https://corsproxy.io/?' + encodeURIComponent('https://m3u4u.com/m3u/xe47yz98gzhxgvgn9vq');
+    const video = document.getElementById('video');
+    const listContainer = document.getElementById('channel-list');
+    let hls = new Hls();
 
-    // Carga mediante proxy alternativo
-    fetch('https://api.codetabs.com/v1/proxy?quest=' + encodeURIComponent(m3uUrl))
-        .then(res => res.text())
+    function playStream(url) {
+        if (Hls.isSupported()) {
+            hls.destroy();
+            hls = new Hls();
+            hls.loadSource(url);
+            hls.attachMedia(video);
+            hls.on(Hls.Events.MANIFEST_PARSED, () => {
+                video.play().catch(() => {});
+            });
+        } else if (video.canPlayType('application/vnd.apple.mpegurl')) {
+            video.src = url;
+            video.addEventListener('loadedmetadata', () => {
+                video.play().catch(() => {});
+            });
+        }
+    }
+
+    fetch(m3uUrl)
+        .then(res => {
+            if (!res.ok) throw new Error('Error al conectar');
+            return res.text();
+        })
         .then(data => {
-            const listContainer = document.getElementById('channel-list');
             listContainer.innerHTML = '';
-            
             const lines = data.split('\n');
             let currentName = '';
 
@@ -58,15 +136,19 @@
                         btn.className = 'channel-btn';
                         btn.innerText = currentName;
                         const stream = line;
-                        btn.onclick = () => player.load(stream);
+                        btn.onclick = () => playStream(stream);
                         listContainer.appendChild(btn);
                         currentName = '';
                     }
                 }
             });
+
+            // Dar foco al primer canal para control remoto
+            const firstBtn = listContainer.querySelector('.channel-btn');
+            if (firstBtn) firstBtn.focus();
         })
-        .catch(() => {
-            document.getElementById('channel-list').innerText = 'Error al conectar con la lista.';
+        .catch(err => {
+            listContainer.innerText = 'Error al cargar lista de canales.';
         });
 </script>
 
